@@ -1,0 +1,227 @@
+---
+title: "Project (Laptop Price)"
+format: html
+editor: visual
+---
+
+1.  Load raw dataset
+
+    ```{r}
+    laptop_price <- read.csv("Laptop_Price_rawdataset.csv")
+    str(laptop_price)
+    summary(laptop_price)
+    ```
+
+2.  Remove outliers
+
+    ```{r}
+    # Load library
+    library(dplyr)
+
+    # Load the dataset
+    laptop_price <- read.csv("Laptop_Price_rawdataset.csv")
+
+    # Convert the PriceUSD column to numeric (remove commas if present)
+    laptop_price$PriceUSD <- as.numeric(gsub(",", "", laptop_price$PriceUSD))
+
+    # Calculate the IQR for PriceUSD
+    Q1 <- quantile(laptop_price$PriceUSD, 0.25, na.rm = TRUE)
+    Q3 <- quantile(laptop_price$PriceUSD, 0.75, na.rm = TRUE)
+    IQR <- Q3 - Q1
+
+    # Define lower and upper bounds for outliers
+    lower_bound <- Q1 - 1.5 * IQR
+    upper_bound <- Q3 + 1.5 * IQR
+
+    # Remove rows with outliers in PriceUSD
+    laptop_price2 <- laptop_price %>%
+      filter(PriceUSD >= lower_bound & PriceUSD <= upper_bound)
+
+    # Save the cleaned dataset or display it
+    write.csv(laptop_price2, "Cleaned_Laptop_Price.csv", row.names = FALSE)
+    print(head(laptop_price2))
+    ```
+
+3.  Remove missing/NA values
+
+    ```{r}
+    laptop_price2 <- na.omit(laptop_price2)
+    ```
+
+4.  Add 1 variable (rank_reverse)
+
+    ```{r}
+    # Load necessary library
+    library(dplyr)
+
+    # Ensure PriceUSD column is numeric
+    laptop_price2$PriceUSD <- as.numeric(gsub(",", "", laptop_price2$PriceUSD))
+
+    # Create a named vector for rank_reverse mapping
+    rank_mapping <- c(
+      "Apple" = 19, "Lenovo" = 18, "HP" = 17, "Dell" = 16,
+      "Asus" = 15, "Acer" = 14, "Microsoft" = 13, 
+      "Samsung" = 12, "MSI" = 11, "Razer" = 10, 
+      "Huawei" = 9, "LG" = 8, "Google" = 7, 
+      "Toshiba" = 6, "Fujitsu" = 5, "Xiaomi" = 4, 
+      "Chuwi" = 3, "Mediacom" = 2, "Vero" = 1
+    )
+
+    # Set the column)
+    laptop_price2$Company <- trimws(laptop_price2$Company)
+
+    # Add the Rank_reverse column using the mapping
+    laptop_price2$Rank_reverse <- rank_mapping[laptop_price2$Company]
+    laptop_price2 <- laptop_price2 %>%
+      relocate(Rank_reverse, .after = Company)
+
+    # Check for any unmatched Company values
+    unmatched_companies <- laptop_price2$Company[is.na(laptop_price2$rank_reverse)]
+    if (length(unmatched_companies) > 0) {
+      print("These companies have no rank assigned:")
+      print(unique(unmatched_companies))
+    }
+
+    # View the first few rows of the updated dataset
+    head(laptop_price2)
+
+    # Optional: Save the cleaned dataset
+    write.csv(laptop_price2, "Laptop_Price2.csv", row.names = FALSE)
+    ```
+
+5.  Convert data types
+
+    ```{r}
+    # Identify variables to convert
+    categorical_vars <- c("Company", "CPU")
+
+    # Convert categorical variables to numerical
+    laptop_price2[categorical_vars] <- lapply(laptop_price2[categorical_vars], function(x) as.numeric(factor(x)))
+
+    # View converted Data
+    str(laptop_price2)
+    summary(laptop_price2)
+    ```
+
+6.  Linear model PriceUSD \~ Company
+
+    ```{r}
+    # Run linear model
+    mod <- lm(PriceUSD ~ Company, data = laptop_price2)
+    summary(mod)
+    ```
+
+7.  Boxplot, scatterplot, and residuals
+
+    ```{r}
+    mod <- lm(PriceUSD ~ Company, data = laptop_price2)
+    summary(mod)
+
+    # Calculate residuals
+    laptop_price2$residuals <- residuals(mod)
+
+    # Check outlier threshold by using Standardized Residuals
+    laptop_price2$std_residuals <- rstandard(mod)
+
+    # Boxplot for residuals
+    boxplot(laptop_price2$residuals, main = "Residuals Boxplot", ylab = "Residuals")
+
+    # Scatterplot of standardized residuals
+    plot(laptop_price2$std_residuals, main = "Standardized Residuals", 
+         ylab = "Standardized Residuals", xlab = "Observation")
+    abline(h = c(-2, 2), col = "red", lty = 2)  # Add threshold lines
+
+    # Residual Plot
+    plot(mod,1)
+    plot(mod,2)
+    ```
+
+8.  Histogram
+
+    ```{r}
+    # Load necessary libraries
+    library(ggplot2)
+
+    # Create a histogram of the cleaned PriceUSD column
+    ggplot(laptop_price2, aes(x = PriceUSD)) +
+      geom_histogram(binwidth = 500, fill = "dodgerblue", color = "black") +
+      labs(title = "Histogram of PriceUSD", x = "PriceUSD", y = "laptop_ID") +
+      theme_minimal() +
+    theme(
+        axis.line = element_line(color = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+    ```
+
+9.  Linear model PriceUSD \~ Company + CPU + RAM
+
+    ```{r}
+    # Run linear model
+    mod2 <- lm(PriceUSD ~ Company + CPU +RAM, data = laptop_price2)
+    summary(mod2)
+    ```
+
+10. Plot mod2
+
+    ```{r}
+    plot(mod2,1)
+    plot(mod2,2)
+    ```
+
+11. BP test
+
+    ```{r}
+    library(lmtest)
+    bptest(mod2)
+    ```
+
+12. KS-test
+
+    ```{r}
+    ks.test(rstandard(mod2),"pnorm")
+    ```
+
+13. Check VIF
+
+    ```{r}
+    library(car)
+    mod2 <- lm(PriceUSD ~ Company + CPU +RAM, data = laptop_price2)
+
+    # Check VIF for the model
+    vif_values <- vif(mod2)
+    print(vif_values)
+
+    # Interpret the VIF
+    if (any(vif_values > 5)) {
+      print("High multicollinearity detected (VIF > 5)")
+    } else {
+      print("No significant multicollinearity detected (VIF <= 5) ")
+    }
+    ```
+
+14. Testing: AIC, BIC, R-Squared
+
+    ```{r}
+    # Load necessary libraries
+    library(ggplot2)
+    library(tidyr)
+
+    # Fit the linear models
+    mod <- lm(PriceUSD ~ Company, data = laptop_price2)          # Model 1
+    mod2 <- lm(PriceUSD ~ Company + CPU + RAM, data = laptop_price2)  # Model 2
+
+    # Calculate AIC, BIC, and R-squared for each model
+    metrics <- data.frame(
+      Model = c("mod", "mod2"),
+      AIC = c(AIC(mod), AIC(mod2)),
+      BIC = c(BIC(mod), BIC(mod2)),
+      R_squared = c(summary(mod)$r.squared, summary(mod2)$r.squared))
+
+    print(metrics)
+    ```
+
+15. Save
+
+    ```{r}
+    write.csv(laptop_price2, "Laptop_Price3.csv", row.names = FALSE)
+    ```
